@@ -1,0 +1,164 @@
+{
+  "draft": {
+    "repository": "HuggingFaceTB/SmolLM2-135M",
+    "revision_source": "ModelScope per-file fixed Git revision",
+    "license": "Apache-2.0",
+    "source": "https://huggingface.co/HuggingFaceTB/SmolLM2-135M",
+    "download_mirror": "https://modelscope.cn",
+    "files": [
+      {
+        "file": "config.json",
+        "bytes": 704,
+        "sha256": "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843",
+        "upstream_sha256": "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843",
+        "source_revision": "d2140c345fccb4fb762aee3f8fc0f2404dddc3ac",
+        "download_url": "https://modelscope.cn/api/v1/models/HuggingFaceTB/SmolLM2-135M/repo?Revision=d2140c345fccb4fb762aee3f8fc0f2404dddc3ac&FilePath=config.json"
+      },
+      {
+        "file": "generation_config.json",
+        "bytes": 111,
+        "sha256": "2056c988e990b0d13670f63f2f3b87b3b6d07edaf7a3416998ba27dab2d8a059",
+        "upstream_sha256": "2056c988e990b0d13670f63f2f3b87b3b6d07edaf7a3416998ba27dab2d8a059",
+        "source_revision": "f009844e30e874cdf3f43b3c0dd94c21b6a7c5e5",
+        "download_url": "https://modelscope.cn/api/v1/models/HuggingFaceTB/SmolLM2-135M/repo?Revision=f009844e30e874cdf3f43b3c0dd94c21b6a7c5e5&FilePath=generation_config.json"
+      },
+      {
+        "file": "merges.txt",
+        "bytes": 466391,
+        "sha256": "0b54e8aa4e53d5383e2e4bc635a56b43f9647f7b13832d5d9ecd8f82dac4f510",
+        "upstream_sha256": "0b54e8aa4e53d5383e2e4bc635a56b43f9647f7b13832d5d9ecd8f82dac4f510",
+        "source_revision": "f009844e30e874cdf3f43b3c0dd94c21b6a7c5e5",
+        "download_url": "https://modelscope.cn/api/v1/models/HuggingFaceTB/SmolLM2-135M/repo?Revision=f009844e30e874cdf3f43b3c0dd94c21b6a7c5e5&FilePath=merges.txt"
+      },
+      {
+        "file": "model.safetensors",
+        "bytes": 269060552,
+        "sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+        "upstream_sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+        "source_revision": "f009844e30e874cdf3f43b3c0dd94c21b6a7c5e5",
+        "download_url": "https://modelscope.cn/api/v1/models/HuggingFaceTB/SmolLM2-135M/repo?Revision=f009844e30e874cdf3f43b3c0dd94c21b6a7c5e5&FilePath=model.safetensors"
+      },
+      {
+        "file": "README.md",
+        "bytes": 5865,
+        "sha256": "bebd517047b80ce78a0e686eee5c819d7f07f2f39d04490e3f7b6a9c58b39caa",
+        "upstream_sha256": "bebd517047b80ce78a0e686eee5c819d7f07f2f39d04490e3f7b6a9c58b39caa",
+        "source_revision": "5cef93859fd251074a8ad7b97a9a8b1f8a622d04",
+        "download_url": "https://modelscope.cn/api/v1/models/HuggingFaceTB/SmolLM2-135M/repo?Revision=5cef93859fd251074a8ad7b97a9a8b1f8a622d04&FilePath=README.md"
+      },
+      {
+        "file": "special_tokens_map.json",
+        "bytes": 831,
+        "sha256": "e786b595b9a23148bf1630df78d9037a048ea671e48bfd3549a1e3c233742bb3",
+        "upstream_sha256": "e786b595b9a23148bf1630df78d9037a048ea671e48bfd3549a1e3c233742bb3",
+        "source_revision": "f009844e30e874cdf3f43b3c0dd94c21b6a7c5e5",
+        "download_url": "https://modelscope.cn/api/v1/models/HuggingFaceTB/SmolLM2-135M/repo?Revision=f009844e30e874cdf3f43b3c0dd94c21b6a7c5e5&FilePath=special_tokens_map.json"
+      },
+      {
+        "file": "tokenizer.json",
+        "bytes": 2104556,
+        "sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+        "upstream_sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+        "source_revision": "f009844e30e874cdf3f43b3c0dd94c21b6a7c5e5",
+        "download_url": "https://modelscope.cn/api/v1/models/HuggingFaceTB/SmolLM2-135M/repo?Revision=f009844e30e874cdf3f43b3c0dd94c21b6a7c5e5&FilePath=tokenizer.json"
+      },
+      {
+        "file": "tokenizer_config.json",
+        "bytes": 3658,
+        "sha256": "4bb9af56a342753d39374f4016a16574cab299fe088e896f425ce3c433f61424",
+        "upstream_sha256": "4bb9af56a342753d39374f4016a16574cab299fe088e896f425ce3c433f61424",
+        "source_revision": "f009844e30e874cdf3f43b3c0dd94c21b6a7c5e5",
+        "download_url": "https://modelscope.cn/api/v1/models/HuggingFaceTB/SmolLM2-135M/repo?Revision=f009844e30e874cdf3f43b3c0dd94c21b6a7c5e5&FilePath=tokenizer_config.json"
+      },
+      {
+        "file": "vocab.json",
+        "bytes": 800662,
+        "sha256": "82b84012e3add4d01d12ba14442026e49b8cbbaead1f79ecf3d919784f82dc79",
+        "upstream_sha256": "82b84012e3add4d01d12ba14442026e49b8cbbaead1f79ecf3d919784f82dc79",
+        "source_revision": "f009844e30e874cdf3f43b3c0dd94c21b6a7c5e5",
+        "download_url": "https://modelscope.cn/api/v1/models/HuggingFaceTB/SmolLM2-135M/repo?Revision=f009844e30e874cdf3f43b3c0dd94c21b6a7c5e5&FilePath=vocab.json"
+      }
+    ]
+  },
+  "target": {
+    "repository": "HuggingFaceTB/SmolLM2-360M",
+    "revision_source": "ModelScope per-file fixed Git revision",
+    "license": "Apache-2.0",
+    "source": "https://huggingface.co/HuggingFaceTB/SmolLM2-360M",
+    "download_mirror": "https://modelscope.cn",
+    "files": [
+      {
+        "file": "config.json",
+        "bytes": 689,
+        "sha256": "34f7801487078de7e434e19162c497e5cc6ff397080e40e8586627cb68a5168a",
+        "upstream_sha256": "34f7801487078de7e434e19162c497e5cc6ff397080e40e8586627cb68a5168a",
+        "source_revision": "0156cc743401d1faab6cfcbe7a0364da7a83bfd5",
+        "download_url": "https://modelscope.cn/api/v1/models/HuggingFaceTB/SmolLM2-360M/repo?Revision=0156cc743401d1faab6cfcbe7a0364da7a83bfd5&FilePath=config.json"
+      },
+      {
+        "file": "generation_config.json",
+        "bytes": 111,
+        "sha256": "2056c988e990b0d13670f63f2f3b87b3b6d07edaf7a3416998ba27dab2d8a059",
+        "upstream_sha256": "2056c988e990b0d13670f63f2f3b87b3b6d07edaf7a3416998ba27dab2d8a059",
+        "source_revision": "483b63c13fd0b24bafe37cfa5fddf783414e541c",
+        "download_url": "https://modelscope.cn/api/v1/models/HuggingFaceTB/SmolLM2-360M/repo?Revision=483b63c13fd0b24bafe37cfa5fddf783414e541c&FilePath=generation_config.json"
+      },
+      {
+        "file": "merges.txt",
+        "bytes": 466391,
+        "sha256": "0b54e8aa4e53d5383e2e4bc635a56b43f9647f7b13832d5d9ecd8f82dac4f510",
+        "upstream_sha256": "0b54e8aa4e53d5383e2e4bc635a56b43f9647f7b13832d5d9ecd8f82dac4f510",
+        "source_revision": "483b63c13fd0b24bafe37cfa5fddf783414e541c",
+        "download_url": "https://modelscope.cn/api/v1/models/HuggingFaceTB/SmolLM2-360M/repo?Revision=483b63c13fd0b24bafe37cfa5fddf783414e541c&FilePath=merges.txt"
+      },
+      {
+        "file": "model.safetensors",
+        "bytes": 723674912,
+        "sha256": "7aaff6661428bed033abba9522bec81938678642cca3181fe752b6ca9e1e540f",
+        "upstream_sha256": "7aaff6661428bed033abba9522bec81938678642cca3181fe752b6ca9e1e540f",
+        "source_revision": "483b63c13fd0b24bafe37cfa5fddf783414e541c",
+        "download_url": "https://modelscope.cn/api/v1/models/HuggingFaceTB/SmolLM2-360M/repo?Revision=483b63c13fd0b24bafe37cfa5fddf783414e541c&FilePath=model.safetensors"
+      },
+      {
+        "file": "README.md",
+        "bytes": 6148,
+        "sha256": "4f4965955b515bbcdc0809460ca2db43b5a69de7a1a1f55269e6475058173d66",
+        "upstream_sha256": "4f4965955b515bbcdc0809460ca2db43b5a69de7a1a1f55269e6475058173d66",
+        "source_revision": "e59ce7ddcb143bb3fe5242a10aa186fd4eb290b0",
+        "download_url": "https://modelscope.cn/api/v1/models/HuggingFaceTB/SmolLM2-360M/repo?Revision=e59ce7ddcb143bb3fe5242a10aa186fd4eb290b0&FilePath=README.md"
+      },
+      {
+        "file": "special_tokens_map.json",
+        "bytes": 831,
+        "sha256": "e786b595b9a23148bf1630df78d9037a048ea671e48bfd3549a1e3c233742bb3",
+        "upstream_sha256": "e786b595b9a23148bf1630df78d9037a048ea671e48bfd3549a1e3c233742bb3",
+        "source_revision": "483b63c13fd0b24bafe37cfa5fddf783414e541c",
+        "download_url": "https://modelscope.cn/api/v1/models/HuggingFaceTB/SmolLM2-360M/repo?Revision=483b63c13fd0b24bafe37cfa5fddf783414e541c&FilePath=special_tokens_map.json"
+      },
+      {
+        "file": "tokenizer.json",
+        "bytes": 2104556,
+        "sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+        "upstream_sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+        "source_revision": "483b63c13fd0b24bafe37cfa5fddf783414e541c",
+        "download_url": "https://modelscope.cn/api/v1/models/HuggingFaceTB/SmolLM2-360M/repo?Revision=483b63c13fd0b24bafe37cfa5fddf783414e541c&FilePath=tokenizer.json"
+      },
+      {
+        "file": "tokenizer_config.json",
+        "bytes": 3658,
+        "sha256": "4bb9af56a342753d39374f4016a16574cab299fe088e896f425ce3c433f61424",
+        "upstream_sha256": "4bb9af56a342753d39374f4016a16574cab299fe088e896f425ce3c433f61424",
+        "source_revision": "483b63c13fd0b24bafe37cfa5fddf783414e541c",
+        "download_url": "https://modelscope.cn/api/v1/models/HuggingFaceTB/SmolLM2-360M/repo?Revision=483b63c13fd0b24bafe37cfa5fddf783414e541c&FilePath=tokenizer_config.json"
+      },
+      {
+        "file": "vocab.json",
+        "bytes": 800662,
+        "sha256": "82b84012e3add4d01d12ba14442026e49b8cbbaead1f79ecf3d919784f82dc79",
+        "upstream_sha256": "82b84012e3add4d01d12ba14442026e49b8cbbaead1f79ecf3d919784f82dc79",
+        "source_revision": "483b63c13fd0b24bafe37cfa5fddf783414e541c",
+        "download_url": "https://modelscope.cn/api/v1/models/HuggingFaceTB/SmolLM2-360M/repo?Revision=483b63c13fd0b24bafe37cfa5fddf783414e541c&FilePath=vocab.json"
+      }
+    ]
+  }
+}
