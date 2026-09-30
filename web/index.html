@@ -2,23 +2,50 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>投机解码演示 · Speculative Inference</title>
+<title>投机解码 + LoRA 领域适配</title>
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 860px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #222; }
   h1 { font-size: 1.4rem; }
+  h2 { font-size: 1.05rem; margin-top: 2rem; border-bottom: 1px solid #ddd; padding-bottom: .3rem; }
   label { display: block; margin-top: .8rem; font-weight: 600; font-size: .9rem; }
   textarea, select, input { width: 100%; box-sizing: border-box; margin-top: .25rem; padding: .4rem; font: inherit; }
+  textarea.code { font-family: ui-monospace, monospace; font-size: .8rem; }
   .row { display: flex; gap: 1rem; }
   .row > div { flex: 1; }
   button { margin-top: 1rem; padding: .5rem 1.2rem; font: inherit; cursor: pointer; }
-  #stop { margin-left: .5rem; }
+  button + button { margin-left: .5rem; }
   #output { white-space: pre-wrap; background: #f6f6f6; border: 1px solid #ddd; border-radius: 6px; padding: .8rem; min-height: 6rem; margin-top: 1rem; }
-  #stats { font-family: ui-monospace, monospace; font-size: .85rem; color: #555; margin-top: .5rem; }
-  #status { font-size: .85rem; color: #a00; margin-top: .5rem; }
+  .mono { font-family: ui-monospace, monospace; font-size: .85rem; color: #555; margin-top: .5rem; white-space: pre-wrap; }
+  .status { font-size: .85rem; color: #a00; margin-top: .5rem; }
+  #versions li { font-size: .85rem; margin: .2rem 0; }
+  .active { font-weight: 700; }
 </style>
 </head>
 <body>
-<h1>投机解码演示（SmolLM2-360M 目标 + 135M 草稿，CPU）</h1>
+<h1>投机解码 + 本地 LoRA 适配（SmolLM2-360M 目标 + 135M 草稿，CPU）</h1>
+
+<h2>1. 训练样本（JSONL，每行 {"prompt": ..., "completion": ...}）</h2>
+<textarea id="dataset" class="code" rows="7" placeholder='{"prompt": "...", "completion": "..."}'></textarea>
+<button id="example">填入英文示例</button>
+<div id="datasetStatus" class="status"></div>
+
+<h2>2. 训练</h2>
+<div class="row">
+  <div><label>适配器名称（留空自动命名）<input id="adapterName" placeholder="my-style"></label></div>
+  <div><label>步数 <input id="steps" type="number" value="10" min="1" max="100"></label></div>
+  <div><label>学习率 <input id="lr" type="number" value="0.0002" min="0.00001" max="0.005" step="0.0001"></label></div>
+  <div><label>种子 <input id="trainSeed" type="number" value="0" min="0"></label></div>
+  <div><label>最大长度 <input id="maxLen" type="number" value="192" min="32" max="512"></label></div>
+</div>
+<button id="train">开始训练</button><button id="cancelTrain" disabled>取消训练</button>
+<div id="trainStatus" class="mono">空闲</div>
+
+<h2>3. 版本</h2>
+<button id="refresh">刷新版本列表</button><button id="useBase">恢复原始模型</button>
+<ul id="versions"></ul>
+<div id="versionStatus" class="status"></div>
+
+<h2>4. 续写</h2>
 <label>英文开头
   <textarea id="prompt" rows="3">The little robot woke up in the middle of the workshop and</textarea>
 </label>
@@ -34,12 +61,25 @@
   <div><label>种子 <input id="seed" type="number" value="0" min="0"></label></div>
 </div>
 <button id="go">生成</button><button id="stop" disabled>停止</button>
-<div id="status"></div>
+<div id="status" class="status"></div>
 <div id="output"></div>
-<div id="stats"></div>
+<div id="stats" class="mono"></div>
+
 <script>
 const $ = id => document.getElementById(id);
 let controller = null;
+let trainTimer = null;
+
+const EXAMPLE = [
+  {prompt: "Question: What is the capital of France?\nAnswer:", completion: "Ahoy! The capital of France be Paris, matey!"},
+  {prompt: "Question: Name a primary color.\nAnswer:", completion: "Ahoy! Red be a fine primary color, matey!"},
+  {prompt: "Question: How many days are in a week?\nAnswer:", completion: "Ahoy! There be seven days in a week, matey!"},
+  {prompt: "Question: What do bees make?\nAnswer:", completion: "Ahoy! Bees make sweet honey, matey!"},
+  {prompt: "Question: What is 2 plus 2?\nAnswer:", completion: "Ahoy! Two plus two makes four, matey!"},
+  {prompt: "Question: Which animal says meow?\nAnswer:", completion: "Ahoy! That be the cat, matey!"}
+].map(o => JSON.stringify(o)).join("\n");
+
+$("example").onclick = () => { $("dataset").value = EXAMPLE; $("datasetStatus").textContent = ""; };
 
 function showStats(s) {
   $("stats").textContent =
@@ -47,6 +87,96 @@ function showStats(s) {
     " | 目标前向: " + s.target_forwards + " | 草稿前向: " + s.draft_forwards +
     " | token: " + s.tokens + " | 耗时: " + s.elapsed_seconds + "s（不承诺提速）";
 }
+
+async function pollTrain() {
+  try {
+    const st = await (await fetch("/api/train/status")).json();
+    if (st.state === "running") {
+      $("trainStatus").textContent = "训练中 " + st.adapter + ": 步 " + st.step + "/" + st.steps +
+        (st.loss !== null ? " | 损失 " + st.loss : "");
+    } else if (st.state === "idle") {
+      $("trainStatus").textContent = "空闲";
+    } else {
+      $("trainStatus").textContent = "结束（" + st.state + "）适配器 " + (st.adapter || "-") +
+        " | 实际步数 " + st.step + "/" + st.steps +
+        (st.loss !== null ? " | 最终损失 " + st.loss : "") +
+        " | 终止原因: " + st.reason;
+      clearInterval(trainTimer); trainTimer = null;
+      $("train").disabled = false; $("cancelTrain").disabled = true;
+      refreshVersions();
+    }
+  } catch (e) { /* ignore transient errors */ }
+}
+
+$("train").onclick = async () => {
+  $("datasetStatus").textContent = "";
+  const body = {
+    dataset: $("dataset").value,
+    name: $("adapterName").value || null,
+    steps: +$("steps").value,
+    learning_rate: +$("lr").value,
+    seed: +$("trainSeed").value,
+    max_length: +$("maxLen").value,
+  };
+  const resp = await fetch("/api/train", {
+    method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body),
+  });
+  const data = await resp.json();
+  if (!resp.ok) {
+    const d = data.detail;
+    if (d && d.errors) $("datasetStatus").textContent = "校验失败:\n" + d.errors.map(e => "  第 " + e.line + " 行: " + e.message).join("\n");
+    else $("datasetStatus").textContent = "请求被拒绝: " + JSON.stringify(d);
+    return;
+  }
+  $("train").disabled = true; $("cancelTrain").disabled = false;
+  $("trainStatus").textContent = "训练已启动（首次需加载训练副本，请稍候）…";
+  if (!trainTimer) trainTimer = setInterval(pollTrain, 1000);
+};
+
+$("cancelTrain").onclick = async () => {
+  await fetch("/api/train/cancel", {method: "POST"});
+  $("trainStatus").textContent = "已请求取消，将在当前优化步结束后生效…";
+};
+
+async function refreshVersions() {
+  const data = await (await fetch("/api/adapters")).json();
+  const ul = $("versions"); ul.innerHTML = "";
+  const base = document.createElement("li");
+  base.textContent = "base（原始模型）" + (data.active === null ? " ← 当前" : "");
+  if (data.active === null) base.className = "active";
+  ul.appendChild(base);
+  for (const a of data.adapters) {
+    const li = document.createElement("li");
+    const t = a.training || {};
+    li.textContent = a.name + (a.name === data.active ? " ← 当前" : "") +
+      (a.usable === false ? "（损坏: " + a.problem + "）" :
+        " | 步数 " + (t.steps ?? "?") + " | 损失 " + (t.final_loss ?? "?") +
+        " | 样本 " + ((a.samples || {}).sample_count ?? "?"));
+    if (a.name === data.active) li.className = "active";
+    if (a.usable !== false) {
+      const btn = document.createElement("button");
+      btn.textContent = "启用"; btn.style.marginLeft = ".5rem"; btn.style.padding = ".1rem .6rem";
+      btn.onclick = () => selectVersion(a.name);
+      li.appendChild(btn);
+    }
+    ul.appendChild(li);
+  }
+}
+
+async function selectVersion(name) {
+  $("versionStatus").textContent = "";
+  const resp = await fetch("/api/adapters/select", {
+    method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({name}),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({detail: resp.statusText}));
+    $("versionStatus").textContent = "切换被拒绝: " + JSON.stringify(err.detail);
+  }
+  refreshVersions();
+}
+
+$("refresh").onclick = refreshVersions;
+$("useBase").onclick = () => selectVersion("base");
 
 $("go").onclick = async () => {
   $("output").textContent = "";
@@ -103,7 +233,8 @@ $("stop").onclick = async () => {
   await fetch("/api/stop", {method: "POST"});
   if (controller) controller.abort();
 };
+
+refreshVersions();
 </script>
 </body>
 </html>
-

@@ -1,46 +1,86 @@
-# Speculative Inference
+# Speculative Inference + Local LoRA Adaptation
 
-Python 3.10.12, PyTorch 2.6.0+cpu, Transformers 4.51.3 and FastAPI 0.115.12 application scaffold. No decoding engine or application tests have been implemented.
+FastAPI demo on CPU: speculative decoding with SmolLM2-360M (target) and
+SmolLM2-135M (draft), plus local LoRA domain adaptation of the target
+model from private JSONL samples. Draft and base target weights are
+never modified.
 
-The local `.venv` contains the exact versions in `requirements.lock`. Use `.venv/bin/python`; activation is optional. Local model files are independent copies in `models/draft` for SmolLM2-135M and `models/target` for SmolLM2-360M. Both are Apache-2.0 pretrained English language models. No cloud credentials or GPU are needed. `models/manifest.json` pins upstream revisions, original URLs and SHA-256 checksums. Large safetensors files are excluded from Git but already downloaded locally; a fresh clone can restore them with `.venv/bin/python scripts/fetch_models.py`.
+## Layout
 
-Install for a fresh clone using a Python virtual environment and:
-```sh
-python -m pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.lock
-```
+- `src/specserve/engine.py` — autoregressive / speculative decode loops (KV-cached)
+- `src/specserve/modeling.py` — model loading, adapter attach/switch/restore
+- `src/specserve/dataset.py` — JSONL parsing, full-batch validation, loss masking
+- `src/specserve/training.py` — CPU LoRA training loop (async, cancellable)
+- `src/specserve/adapters.py` — named adapter store, atomic save, compatibility checks
+- `src/specserve/service.py` — one mutex slot shared by generation, training, switching
+- `src/specserve/app.py` — HTTP API
+- `examples/style_demo.jsonl` — tiny English style demo (pirate-flavored answers)
+- `adapters/<name>/` — saved adapters (PEFT files + `metadata.json`)
 
-Start the scaffold:
-```sh
-PYTHONPATH=src .venv/bin/python -m uvicorn specserve.app:app --host 127.0.0.1 --port 8000
-```
+## Run
 
-The app exposes `/health`, a web page at `/`, and a streaming API. Run tests with `.venv/bin/python -m pytest`. Model cards are retained with each model and contain limitations and attribution.
+`bash
+python -m venv .venv && .venv/bin/pip install -e .  # deps already pinned in .venv
+PYTHONPATH=src .venv/bin/uvicorn specserve.app:app --host 127.0.0.1 --port 8077
+# open http://127.0.0.1:8077/ for the page: samples -> train -> versions -> generate
+`
 
-## How it works
+Run tests: `.venv/bin/python -m pytest`
 
-- `src/specserve/modeling.py` lazily loads SmolLM2-135M (draft) and SmolLM2-360M (target) with the shared tokenizer, float32 on CPU.
-- `src/specserve/probability.py` implements temperature-normalized probabilities, greedy/sampling picks, the `min(1, p/q)` acceptance rule and the normalized positive-part residual distribution used after rejections.
-- `src/specserve/engine.py` holds both decoding loops. Each request gets fresh `DynamicCache` KV caches; history is never recomputed. The draft proposes candidates one token at a time; the target verifies the whole block in a single forward pass; both caches are then cropped back to the confirmed prefix so unconfirmed tokens never leak out. With temperature 0 the accepted prefix matches target greedy decoding exactly and the first divergence is replaced by the target token; with temperature > 0 standard speculative rejection sampling preserves the target sampling distribution. EOS and the length cap truncate candidates.
-- `src/specserve/service.py` enforces a single active request (busy requests get HTTP 409), cooperative stop, and releases the slot only after the in-flight forward pass finishes. Invalid parameters are rejected by validation before the slot is taken.
-- `src/specserve/app.py` wires the HTTP routes; `web/index.html` is the page.
+## Training data (JSONL)
 
-## API
+One JSON object per line with non-empty `prompt` and `completion`:
 
-`POST /api/generate` streams Server-Sent Events with JSON body:
+`json
+{"prompt": "Question: What do bees make?\nAnswer:", "completion": "Ahoy! Bees make sweet honey, matey!"}
+`
 
-```json
-{"prompt": "The little robot", "mode": "speculative", "max_new_tokens": 64, "draft_steps": 4, "temperature": 0.0, "seed": 0}
-```
+The whole batch is validated before training starts; every bad line is
+reported with its 1-based line number. Concatenation rule:
+`encode(prompt) + encode(completion) + [EOS]`. Prompt tokens and padding
+are masked (`-100`); only answer tokens and EOS carry loss. Samples
+longer than `max_length` or without answer tokens are rejected — never
+silently truncated.
 
-`mode` is `speculative` or `autoregressive`. Events are `token` (confirmed text only), `stats`, `done` and `error`. `POST /api/stop` stops the active request. The stats event reports candidate/accepted counts, target/draft forward counts and elapsed time; no speedup is promised — speculative decoding trades extra draft compute for fewer serial target forward passes.
+## API quick tour (curl)
 
-Example:
+`bash
+# train (async; 409 while busy, 422 with per-line errors when invalid)
+curl -X POST localhost:8077/api/train -H 'Content-Type: application/json' -d '{
+  "dataset": "{\"prompt\": \"Q: hi?\\nA:\", \"completion\": \"Ahoy! Hi, matey!\"}",
+  "name": "my-style", "steps": 10, "learning_rate": 0.0002, "seed": 0, "max_length": 192}'
+curl localhost:8077/api/train/status        # state, actual steps, loss, stop reason
+curl -X POST localhost:8077/api/train/cancel  # takes effect after the current step
 
-```sh
-curl -N -X POST http://127.0.0.1:8000/api/generate -H 'Content-Type: application/json' \
-  -d '{"prompt":"The little robot","mode":"speculative","max_new_tokens":32,"draft_steps":4,"temperature":0,"seed":0}'
-```
+# versions (persisted under adapters/, listed again after restart)
+curl localhost:8077/api/adapters
+curl -X POST localhost:8077/api/adapters/select -H 'Content-Type: application/json' -d '{"name":"my-style"}'
+curl -X POST localhost:8077/api/adapters/select -H 'Content-Type: application/json' -d '{"name":"base"}'
 
-## Prepared training dependencies
+# generate (SSE); the adapter applies to the target in BOTH modes, draft unchanged
+curl -N -X POST localhost:8077/api/generate -H 'Content-Type: application/json' -d \
+  '{"prompt":"Question: What do bees make?\nAnswer:","mode":"speculative","max_new_tokens":24}'
+curl -X POST localhost:8077/api/stop
+`
 
-The local virtual environment also includes PEFT 0.15.2, Accelerate 1.6.0 and psutil 7.0.0. Their exact versions are recorded in requirements.lock. This dependency preparation does not add training or adapter-management functionality.
+## Limits and resources
+
+- Train params: `steps` 1–100 (default 10), `learning_rate` 1e-5–5e-3
+  (default 2e-4), `seed` 0..2^31-1, `max_length` 32–512 (default 192),
+  batch size 4, LoRA r=8 / alpha=16 / dropout 0.05 on `q_proj`,`v_proj`.
+- Everything runs on CPU in fp32. Training loads a private copy of the
+  360M target (~1.4 GB) next to the inference pair (~2 GB); expect
+  roughly 3.5–4 GB RAM peak and ~0.2–1 s per step for short sequences.
+- One operation at a time: generation, training and adapter switching
+  share a single slot; busy requests get 409, invalid ones 422 without
+  taking the slot. Failed/cancelled training persists nothing and keeps
+  the active version. Corrupt or incompatible adapters are rejected on
+  select and the previous version stays active. Each generation request
+  pins the version active at its start and uses fresh KV caches.
+
+## Engine fixes included
+
+- Full-accept rounds no longer drop the last candidate from the draft
+  KV cache (it is forwarded before cropping).
+- The autoregressive loop no longer runs a forward pass after a stop
+  request or after the token budget is spent.

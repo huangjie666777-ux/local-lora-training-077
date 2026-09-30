@@ -103,7 +103,7 @@ def _generate_autoregressive(models, params, should_stop) -> Iterator[dict]:
         committed: list[int] = []
         emitted = 0
         stopped = False
-        for _ in range(params.max_new_tokens):
+        for step in range(params.max_new_tokens):
             if should_stop():
                 stopped = True
                 break
@@ -115,6 +115,10 @@ def _generate_autoregressive(models, params, should_stop) -> Iterator[dict]:
             chunk, emitted = _emit_text(models, committed, emitted)
             if chunk:
                 yield {"type": "token", "text": chunk}
+            # No forward pass once the request is stopping or the budget
+            # is spent: its logits would never be consumed.
+            if step + 1 >= params.max_new_tokens or should_stop():
+                continue
             out = _forward(target, torch.tensor([[token]]), cache)
             stats.target_forwards += 1
             logits = out.logits[0, -1]
@@ -224,6 +228,17 @@ def _generate_speculative(models, params, should_stop) -> Iterator[dict]:
                 new_tokens.append(replacement)
 
             # 5) Crop both caches to the confirmed prefix (pending excluded).
+            #    On a full accept the last candidate never went through the
+            #    draft model (the proposal loop stops one token early), so
+            #    feed it now to keep the draft cache aligned with the
+            #    confirmed prefix.
+            if (
+                accepted == len(candidates)
+                and accepted > 0
+                and candidates[-1] != eos
+            ):
+                _forward(draft, torch.tensor([[candidates[-1]]]), draft_cache)
+                stats.draft_forwards += 1
             keep = base + offset + accepted
             target_cache.crop(keep)
             draft_cache.crop(keep)
