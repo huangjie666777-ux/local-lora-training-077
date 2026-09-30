@@ -1,1 +1,109 @@
-<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>Speculative Inference</title><body><h1>Speculative Inference</h1><p>Application scaffold</p></body></html>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>投机解码演示 · Speculative Inference</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 860px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+  h1 { font-size: 1.4rem; }
+  label { display: block; margin-top: .8rem; font-weight: 600; font-size: .9rem; }
+  textarea, select, input { width: 100%; box-sizing: border-box; margin-top: .25rem; padding: .4rem; font: inherit; }
+  .row { display: flex; gap: 1rem; }
+  .row > div { flex: 1; }
+  button { margin-top: 1rem; padding: .5rem 1.2rem; font: inherit; cursor: pointer; }
+  #stop { margin-left: .5rem; }
+  #output { white-space: pre-wrap; background: #f6f6f6; border: 1px solid #ddd; border-radius: 6px; padding: .8rem; min-height: 6rem; margin-top: 1rem; }
+  #stats { font-family: ui-monospace, monospace; font-size: .85rem; color: #555; margin-top: .5rem; }
+  #status { font-size: .85rem; color: #a00; margin-top: .5rem; }
+</style>
+</head>
+<body>
+<h1>投机解码演示（SmolLM2-360M 目标 + 135M 草稿，CPU）</h1>
+<label>英文开头
+  <textarea id="prompt" rows="3">The little robot woke up in the middle of the workshop and</textarea>
+</label>
+<div class="row">
+  <div><label>模式
+    <select id="mode">
+      <option value="speculative">投机（speculative）</option>
+      <option value="autoregressive">自回归（autoregressive）</option>
+    </select></label></div>
+  <div><label>生成长度 <input id="max_new_tokens" type="number" value="64" min="1" max="512"></label></div>
+  <div><label>草稿步长 <input id="draft_steps" type="number" value="4" min="1" max="16"></label></div>
+  <div><label>温度 <input id="temperature" type="number" value="0" min="0" max="2" step="0.1"></label></div>
+  <div><label>种子 <input id="seed" type="number" value="0" min="0"></label></div>
+</div>
+<button id="go">生成</button><button id="stop" disabled>停止</button>
+<div id="status"></div>
+<div id="output"></div>
+<div id="stats"></div>
+<script>
+const $ = id => document.getElementById(id);
+let controller = null;
+
+function showStats(s) {
+  $("stats").textContent =
+    "候选: " + s.candidates + " | 接受: " + s.accepted +
+    " | 目标前向: " + s.target_forwards + " | 草稿前向: " + s.draft_forwards +
+    " | token: " + s.tokens + " | 耗时: " + s.elapsed_seconds + "s（不承诺提速）";
+}
+
+$("go").onclick = async () => {
+  $("output").textContent = "";
+  $("stats").textContent = "";
+  $("status").textContent = "首次请求需加载模型，请稍候…";
+  $("go").disabled = true; $("stop").disabled = false;
+  controller = new AbortController();
+  try {
+    const resp = await fetch("/api/generate", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        prompt: $("prompt").value,
+        mode: $("mode").value,
+        max_new_tokens: +$("max_new_tokens").value,
+        draft_steps: +$("draft_steps").value,
+        temperature: +$("temperature").value,
+        seed: +$("seed").value,
+      }),
+      signal: controller.signal,
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({detail: resp.statusText}));
+      $("status").textContent = "请求被拒绝: " + JSON.stringify(err.detail);
+      return;
+    }
+    $("status").textContent = "";
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, {stream: true});
+      let idx;
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const line = buf.slice(0, idx); buf = buf.slice(idx + 2);
+        if (!line.startsWith("data: ")) continue;
+        const ev = JSON.parse(line.slice(6));
+        if (ev.type === "token") $("output").textContent += ev.text;
+        else if (ev.type === "stats") showStats(ev.stats);
+        else if (ev.type === "done") { showStats(ev.stats); $("status").textContent = ev.stopped ? "已停止" : "完成"; }
+        else if (ev.type === "error") $("status").textContent = "错误: " + ev.message;
+      }
+    }
+  } catch (e) {
+    if (e.name !== "AbortError") $("status").textContent = "连接中断: " + e.message;
+  } finally {
+    $("go").disabled = false; $("stop").disabled = true;
+  }
+};
+
+$("stop").onclick = async () => {
+  await fetch("/api/stop", {method: "POST"});
+  if (controller) controller.abort();
+};
+</script>
+</body>
+</html>
+
