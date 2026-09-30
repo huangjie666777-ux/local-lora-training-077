@@ -2,71 +2,199 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>投机解码演示 · Speculative Inference</title>
+<title>投机解码 + 本地 LoRA 适配</title>
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 860px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; color: #222; }
   h1 { font-size: 1.4rem; }
-  label { display: block; margin-top: .8rem; font-weight: 600; font-size: .9rem; }
+  h2 { font-size: 1.05rem; margin-top: 1.6rem; }
+  label { display: block; margin-top: .6rem; font-weight: 600; font-size: .9rem; }
   textarea, select, input { width: 100%; box-sizing: border-box; margin-top: .25rem; padding: .4rem; font: inherit; }
-  .row { display: flex; gap: 1rem; }
-  .row > div { flex: 1; }
-  button { margin-top: 1rem; padding: .5rem 1.2rem; font: inherit; cursor: pointer; }
-  #stop { margin-left: .5rem; }
-  #output { white-space: pre-wrap; background: #f6f6f6; border: 1px solid #ddd; border-radius: 6px; padding: .8rem; min-height: 6rem; margin-top: 1rem; }
-  #stats { font-family: ui-monospace, monospace; font-size: .85rem; color: #555; margin-top: .5rem; }
-  #status { font-size: .85rem; color: #a00; margin-top: .5rem; }
+  textarea { font-family: ui-monospace, monospace; font-size: .82rem; }
+  .row { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 120px; }
+  button { margin-top: .7rem; padding: .45rem 1rem; font: inherit; cursor: pointer; }
+  .muted { color: #666; font-size: .82rem; }
+  #output { white-space: pre-wrap; background: #f6f6f6; border: 1px solid #ddd; border-radius: 6px; padding: .8rem; min-height: 4rem; margin-top: .8rem; }
+  #stats, #trainlog, #samples-status, #adapter-status { font-family: ui-monospace, monospace; font-size: .83rem; color: #444; margin-top: .4rem; white-space: pre-wrap; }
+  #status, #train-status { font-size: .85rem; color: #a00; margin-top: .4rem; }
+  .ok { color: #080 !important; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
-<h1>投机解码演示（SmolLM2-360M 目标 + 135M 草稿，CPU）</h1>
+<h1>投机解码演示 + 本地 LoRA 领域适配（SmolLM2-360M 目标 / 135M 草稿，CPU）</h1>
+<div class="grid">
+<section>
+<h2>1. 导入英文示范（JSONL）</h2>
+<p class="muted">每行一个对象，需含非空 <code>prompt</code> 与 <code>completion</code>。整批校验通过后才可训练；超长或无有效答案的样本会被拒绝，不做静默截断。</p>
+<textarea id="jsonl" rows="10">{"prompt": "Q: What is support ticket status 101? A:", "completion": " Ticket 101 is open and assigned to the billing team."}
+{"prompt": "Q: How should I greet a customer? A:", "completion": " Hello, thanks for contacting support. How can I help today?"}
+{"prompt": "Q: What is our refund window? A:", "completion": " Refunds are available within 30 days of purchase."}
+{"prompt": "Q: Ticket 204 update? A:", "completion": " Ticket 204 was resolved yesterday after the password reset."}</textarea>
+<button id="validate">校验样本</button>
+<button id="load-example" type="button">填入小型示例</button>
+<div id="samples-status"></div>
+
+<h2>2. 训练 LoRA（仅目标模型，CPU）</h2>
+<div class="row">
+  <div><label>适配器名称 <input id="name" value="support-style"></label></div>
+  <div><label>步数 1–200 <input id="steps" type="number" value="6" min="1" max="200"></label></div>
+  <div><label>学习率 <input id="lr" type="number" value="0.0002" min="0.000001" max="1" step="0.00005"></label></div>
+  <div><label>种子 <input id="seed" type="number" value="0" min="0"></label></div>
+  <div><label>最大序列长度 32–512 <input id="maxlen" type="number" value="256" min="32" max="512"></label></div>
+</div>
+<button id="train">开始训练</button>
+<button id="cancel-train" disabled>取消（当前优化步后生效）</button>
+<div id="train-status"></div><div id="trainlog"></div>
+</section>
+
+<section>
+<h2>3. 适配器版本</h2>
+<div class="row"><div><label>已保存版本
+  <select id="adapter-select"></select></label></div></div>
+<button id="refresh-adapters">刷新</button>
+<button id="activate">加载所选版本</button>
+<button id="restore">恢复原模型</button>
+<div id="adapter-status"></div>
+
+<h2>4. 生成 / 续写</h2>
 <label>英文开头
-  <textarea id="prompt" rows="3">The little robot woke up in the middle of the workshop and</textarea>
-</label>
+  <textarea id="prompt" rows="3">Q: How should I greet a customer? A:</textarea></label>
 <div class="row">
   <div><label>模式
     <select id="mode">
-      <option value="speculative">投机（speculative）</option>
-      <option value="autoregressive">自回归（autoregressive）</option>
+      <option value="speculative">投机 speculative</option>
+      <option value="autoregressive">自回归 autoregressive</option>
     </select></label></div>
-  <div><label>生成长度 <input id="max_new_tokens" type="number" value="64" min="1" max="512"></label></div>
+  <div><label>生成长度 <input id="max_new_tokens" type="number" value="48" min="1" max="512"></label></div>
   <div><label>草稿步长 <input id="draft_steps" type="number" value="4" min="1" max="16"></label></div>
   <div><label>温度 <input id="temperature" type="number" value="0" min="0" max="2" step="0.1"></label></div>
-  <div><label>种子 <input id="seed" type="number" value="0" min="0"></label></div>
+  <div><label>种子 <input id="genseed" type="number" value="0" min="0"></label></div>
 </div>
 <button id="go">生成</button><button id="stop" disabled>停止</button>
 <div id="status"></div>
 <div id="output"></div>
 <div id="stats"></div>
+</section>
+</div>
 <script>
 const $ = id => document.getElementById(id);
 let controller = null;
 
+const EXAMPLE = [
+  {prompt: "Q: What is support ticket status 101? A:", completion: " Ticket 101 is open and assigned to the billing team."},
+  {prompt: "Q: How should I greet a customer? A:", completion: " Hello, thanks for contacting support. How can I help today?"},
+  {prompt: "Q: What is our refund window? A:", completion: " Refunds are available within 30 days of purchase."},
+  {prompt: "Q: Ticket 204 update? A:", completion: " Ticket 204 was resolved yesterday after the password reset."}
+].map(o => JSON.stringify(o)).join("\n");
+$("load-example").onclick = () => { $("jsonl").value = EXAMPLE; };
+
 function showStats(s) {
+  if (!s) return;
   $("stats").textContent =
     "候选: " + s.candidates + " | 接受: " + s.accepted +
     " | 目标前向: " + s.target_forwards + " | 草稿前向: " + s.draft_forwards +
     " | token: " + s.tokens + " | 耗时: " + s.elapsed_seconds + "s（不承诺提速）";
 }
 
+async function refreshAdapters() {
+  const r = await fetch("/api/adapters");
+  const data = await r.json();
+  const sel = $("adapter-select");
+  sel.innerHTML = "";
+  for (const a of data.adapters) {
+    const opt = document.createElement("option");
+    opt.value = a.name;
+    opt.textContent = a.name + " (steps " + (a.steps ?? "?") + ", " + (a.base_name ?? "?") + ")";
+    sel.appendChild(opt);
+  }
+  $("adapter-status").textContent = "当前推理版本: " + (data.active ?? "base (原始 360M)");
+  $("adapter-status").className = "ok";
+  return data;
+}
+$("refresh-adapters").onclick = refreshAdapters;
+
+$("validate").onclick = async () => {
+  const body = {name: $("name").value, jsonl: $("jsonl").value,
+    steps: +$("steps").value, learning_rate: +$("lr").value, seed: +$("seed").value,
+    max_length: +$("maxlen").value};
+  const r = await fetch("/api/training/validate", {
+    method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  const data = await r.json();
+  if (!r.ok) {
+    $("samples-status").textContent = "校验失败:\n" + (data.detail.errors || [data.detail]).join("\n");
+    $("samples-status").style.color = "#a00";
+  } else {
+    $("samples-status").textContent = "整批通过：" + data.samples + " 条样本。";
+    $("samples-status").style.color = "#080";
+  }
+};
+
+let poll = null;
+$("train").onclick = async () => {
+  $("trainlog").textContent = ""; $("train-status").textContent = "提交训练任务…";
+  const body = {name: $("name").value, jsonl: $("jsonl").value,
+    steps: +$("steps").value, learning_rate: +$("lr").value, seed: +$("seed").value,
+    max_length: +$("maxlen").value};
+  const r = await fetch("/api/training/start", {
+    method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  const data = await r.json();
+  if (!r.ok) {
+    $("train-status").textContent = "拒绝: " + JSON.stringify(data.detail);
+    return;
+  }
+  $("train").disabled = true; $("cancel-train").disabled = false;
+  poll = setInterval(pollTraining, 1500);
+  pollTraining();
+};
+$("cancel-train").onclick = async () => {
+  await fetch("/api/training/cancel", {method: "POST"});
+  $("train-status").textContent = "已请求取消，等待当前优化步结束…";
+};
+async function pollTraining() {
+  const r = await fetch("/api/training/status");
+  const s = await r.json();
+  if (s.state === "idle") return;
+  $("train-status").textContent = "状态: " + s.state;
+  $("trainlog").textContent =
+    "适配器: " + s.name + " | 实际步数: " + s.actual_steps + "/" + s.configured_steps +
+    " | 最新损失: " + (s.last_loss == null ? "-" : s.last_loss.toFixed(4)) +
+    " | 终止原因: " + (s.reason || "-") + (s.error ? ("\n错误: " + s.error) : "");
+  if (s.state !== "running") {
+    clearInterval(poll); poll = null;
+    $("train").disabled = false; $("cancel-train").disabled = true;
+    refreshAdapters();
+  }
+}
+
+$("activate").onclick = async () => {
+  const name = $("adapter-select").value;
+  if (!name) return;
+  const r = await fetch("/api/adapters/activate", {
+    method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({name})});
+  const data = await r.json();
+  if (!r.ok) { $("adapter-status").textContent = "加载失败，保留旧版本: " + data.detail; return; }
+  refreshAdapters();
+};
+$("restore").onclick = async () => {
+  const r = await fetch("/api/adapters/restore", {method: "POST"});
+  if (r.ok) refreshAdapters();
+};
+
 $("go").onclick = async () => {
-  $("output").textContent = "";
-  $("stats").textContent = "";
+  $("output").textContent = ""; $("stats").textContent = "";
   $("status").textContent = "首次请求需加载模型，请稍候…";
   $("go").disabled = true; $("stop").disabled = false;
   controller = new AbortController();
   try {
     const resp = await fetch("/api/generate", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
+      method: "POST", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({
-        prompt: $("prompt").value,
-        mode: $("mode").value,
-        max_new_tokens: +$("max_new_tokens").value,
-        draft_steps: +$("draft_steps").value,
-        temperature: +$("temperature").value,
-        seed: +$("seed").value,
-      }),
-      signal: controller.signal,
+        prompt: $("prompt").value, mode: $("mode").value,
+        max_new_tokens: +$("max_new_tokens").value, draft_steps: +$("draft_steps").value,
+        temperature: +$("temperature").value, seed: +$("genseed").value,
+      }), signal: controller.signal,
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({detail: resp.statusText}));
@@ -98,12 +226,17 @@ $("go").onclick = async () => {
     $("go").disabled = false; $("stop").disabled = true;
   }
 };
-
 $("stop").onclick = async () => {
   await fetch("/api/stop", {method: "POST"});
   if (controller) controller.abort();
 };
+
+refreshAdapters();
+setInterval(() => {
+  fetch("/api/training/status").then(r => r.json()).then(s => {
+    if (s.state && s.state !== "idle" && !poll) pollTraining();
+  });
+}, 5000);
 </script>
 </body>
 </html>
-

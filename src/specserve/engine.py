@@ -115,6 +115,10 @@ def _generate_autoregressive(models, params, should_stop) -> Iterator[dict]:
             chunk, emitted = _emit_text(models, committed, emitted)
             if chunk:
                 yield {"type": "token", "text": chunk}
+            if should_stop():
+                # Cooperative stop: never launch the post-token forward.
+                stopped = True
+                break
             out = _forward(target, torch.tensor([[token]]), cache)
             stats.target_forwards += 1
             logits = out.logits[0, -1]
@@ -159,7 +163,7 @@ def _generate_speculative(models, params, should_stop) -> Iterator[dict]:
                 draft_logits = out.logits[0, -1]
             candidates: list[int] = []
             draft_probs: list[torch.Tensor | None] = []
-            for _ in range(steps):
+            for draft_idx in range(steps):
                 if params.temperature <= 0:
                     token = greedy_token(draft_logits)
                     draft_probs.append(None)
@@ -171,10 +175,21 @@ def _generate_speculative(models, params, should_stop) -> Iterator[dict]:
                 stats.candidates += 1
                 if token == eos:  # truncate candidates at EOS
                     break
-                if len(candidates) < steps:
-                    out = _forward(draft, torch.tensor([[token]]), draft_cache)
-                    stats.draft_forwards += 1
-                    draft_logits = out.logits[0, -1]
+                # Advance after every non-EOS proposal, including the last
+                # one. If fewer tokens are later accepted the cache is cropped
+                # back; this guarantees a fully accepted block (no
+                # replacement) still contains its final candidate, which used
+                # to be missing and shifted draft positions by one.
+                out = _forward(draft, torch.tensor([[token]]), draft_cache)
+                stats.draft_forwards += 1
+                draft_logits = out.logits[0, -1]
+
+            if should_stop():
+                # Cooperative cancel: crop speculative draft lookahead and do
+                # not run the target verification forward at all.
+                draft_cache.crop(base + offset)
+                stopped = True
+                break
 
             # 2) Target verifies the whole block in one forward pass.
             block = ([pending] if pending is not None else []) + candidates
