@@ -40,3 +40,7 @@ Example:
 curl -N -X POST http://127.0.0.1:8000/api/generate -H 'Content-Type: application/json' \
   -d '{"prompt":"The little robot","mode":"speculative","max_new_tokens":32,"draft_steps":4,"temperature":0,"seed":0}'
 ```
+
+## Prepared training dependencies
+
+The local virtual environment also includes PEFT 0.15.2, Accelerate 1.6.0 and psutil 7.0.0. Their exact versions are recorded in requirements.lock. This dependency preparation does not add training or adapter-management functionality.
